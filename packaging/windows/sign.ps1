@@ -55,7 +55,7 @@ if (-not $haveCert -and -not $haveAzure) {
 }
 
 $script:SignTool = Find-SignTool
-$common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256', '/d', 'GridCraft', '/du', 'https://github.com/storytold/gridcraft')
+$common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256', '/d', 'Atelier Ledger', '/du', 'https://github.com/Aetherion-Nation-Builders/atelier-ledger')
 $tmp = Join-Path ([IO.Path]::GetTempPath()) "gridcraft-sign-$PID"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 

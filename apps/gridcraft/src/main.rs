@@ -56,9 +56,9 @@ impl eframe::App for App {
 
 fn config_dir() -> Option<std::path::PathBuf> {
     if cfg!(target_os = "macos") {
-        std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Library/Application Support/GridCraft"))
+        std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Library/Application Support/Atelier Ledger"))
     } else if cfg!(windows) {
-        std::env::var_os("APPDATA").map(|a| std::path::PathBuf::from(a).join("GridCraft"))
+        std::env::var_os("APPDATA").map(|a| std::path::PathBuf::from(a).join("Atelier Ledger"))
     } else {
         std::env::var_os("XDG_CONFIG_HOME")
             .map(std::path::PathBuf::from)
@@ -193,7 +193,7 @@ fn main() -> eframe::Result<()> {
     }));
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("GridCraft {}", env!("CARGO_PKG_VERSION"));
+        println!("Atelier Ledger {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
     let mut control_port: Option<u16> = std::env::var("GRIDCRAFT_CONTROL_PORT").ok().and_then(|p| p.parse().ok());
@@ -222,7 +222,7 @@ fn main() -> eframe::Result<()> {
     if let Some(logger) = logger {
         match log_dir().filter(|_| prefs_enabled()) {
             Some(dir) => match logger.attach_dir(&dir) {
-                Ok(path) => log::info!("GridCraft {}, log file {}", env!("CARGO_PKG_VERSION"), path.display()),
+                Ok(path) => log::info!("Atelier Ledger {}, log file {}", env!("CARGO_PKG_VERSION"), path.display()),
                 // Standard error only by now (`attach_dir` gave up on the file); unlike `eprintln!`, never panics.
                 Err(e) => log::warn!("no log file: {e}"),
             },
@@ -248,7 +248,7 @@ fn main() -> eframe::Result<()> {
     let control_port = control_port;
     load_prefs(&mut app);
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("GridCraft")
+        .with_title("Atelier Ledger")
         .with_inner_size([1440.0, 900.0])
         .with_min_inner_size([640.0, 420.0])
         .with_app_id("ai.storyteller.gridcraft")

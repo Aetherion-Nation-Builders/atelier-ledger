@@ -497,7 +497,7 @@ fn mcp(args: &[String]) -> Result<(), String> {
             let addr = control_addr(c);
             Box::new(
                 Remote::connect(&addr)
-                    .map_err(|e| format!("cannot connect to the GridCraft app at {addr}: {e} (start it with `gridcraft --control PORT`)"))?,
+                    .map_err(|e| format!("cannot connect to the Atelier Ledger app at {addr}: {e} (start it with `gridcraft --control PORT`)"))?,
             )
         }
         None => {
@@ -533,7 +533,7 @@ fn send(args: &[String]) -> Result<(), String> {
     }
     let addr = control_addr(port);
     let mut r = Remote::connect(&addr)
-        .map_err(|e| format!("cannot connect to the GridCraft app at {addr}: {e} (start it with `gridcraft --control {port}`)"))?;
+        .map_err(|e| format!("cannot connect to the Atelier Ledger app at {addr}: {e} (start it with `gridcraft --control {port}`)"))?;
     let v = r.call(method, params)?;
     outln!("{}", pretty(&v));
     Ok(())
