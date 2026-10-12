@@ -16,9 +16,9 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or $env:RUN
 }
 if (-not $WorkDir) { $WorkDir = Join-Path $env:RUNNER_TEMP 'gridcraft-shortcut-smoke' }
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$InstallDir = Join-Path $env:ProgramFiles 'GridCraft'
-$DesktopLink = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'GridCraft.lnk'
-$StartLink = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'GridCraft.lnk'
+$InstallDir = Join-Path $env:ProgramFiles 'Atelier Ledger'
+$DesktopLink = Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'Atelier Ledger.lnk'
+$StartLink = Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'Atelier Ledger.lnk'
 $ChoiceKey = 'HKLM:\Software\GridCraft\Installer'
 $ComponentKey = 'HKLM:\Software\GridCraft\Installer'
 $UninstallRoot = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
@@ -108,7 +108,7 @@ function Assert-Desktop([bool] $Enabled) {
     Assert-That ($shortcut.IconLocation -match '^(.*),\s*0$') 'Desktop shortcut must use icon index zero'
     $iconPath = [Environment]::ExpandEnvironmentVariables($Matches[1].Trim('"'))
     Assert-That (Test-Path $iconPath) 'Desktop shortcut icon is missing'
-    Assert-That ((Get-FileHash $iconPath).Hash -eq (Get-FileHash $Icon).Hash) 'Desktop shortcut does not use the packaged GridCraft icon'
+    Assert-That ((Get-FileHash $iconPath).Hash -eq (Get-FileHash $Icon).Hash) 'Desktop shortcut does not use the packaged Atelier Ledger icon'
   } finally {
     foreach ($item in $shortcut, $shell) {
       if ($item) { [Runtime.InteropServices.Marshal]::FinalReleaseComObject($item) | Out-Null }
