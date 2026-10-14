@@ -21,6 +21,10 @@ CI here is upstream's. Upstream has no test workflow on pull requests: run `carg
 Packaging lint runs on pull requests that touch packaging, workflows or the app icon; FreeBSD runs
 only when started by hand; Windows ARM64 runs on a push to a `release` branch or by hand. The
 Flatpak Pages workflow publishes only when a GitHub release is published (its page titles still
-say GridCraft; they are for the packaging pass). Turned off in this repository, on purpose (it
-costs Actions minutes and builds things we do not ship yet): `release.yml`. Turn it on from the
-Actions tab when it is wanted.
+say GridCraft; they are for the packaging pass).
+
+`release.yml` builds the macOS DMG only for now, on the standard `macos-15` runner, unsigned
+(`docs/releasing.md`). Its other platform jobs are kept from upstream and skipped unless named in
+the repository variable `ATELIER_RELEASE_PLATFORMS`; the DMG holds `Atelier Ledger.app` on an
+`Atelier Ledger` volume, with the Atelier background (`packaging/macos/dmg/`). When syncing, keep
+those lines of ours in `release.yml`, `packaging/macos/package.sh` and `packaging/macos/dmg/`.
