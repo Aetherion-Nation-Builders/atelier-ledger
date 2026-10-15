@@ -28,3 +28,10 @@ say GridCraft; they are for the packaging pass).
 the repository variable `ATELIER_RELEASE_PLATFORMS`; the DMG holds `Atelier Ledger.app` on an
 `Atelier Ledger` volume, with the Atelier background (`packaging/macos/dmg/`). When syncing, keep
 those lines of ours in `release.yml`, `packaging/macos/package.sh` and `packaging/macos/dmg/`.
+
+Upstream now calls shared workflows from `storytold/craft-common-actions` (`packaging-lint.yml`,
+`windows-arm64.yml`, and its `release.yml`). Here they are pinned to a commit rather than
+`@main`; a sync moves the pin on purpose. Our `release.yml` keeps its own jobs instead of the
+shared one, which would build every platform on the larger runner as "GridCraft". The shared
+Windows ARM64 check looks for upstream's install folder, so revisit it before turning that
+workflow on.

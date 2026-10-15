@@ -53,6 +53,7 @@ The sections below are GridCraft's own notes, kept as upstream writes them (they
 - **Compatible.** XLSX is the native format: styles, themes, formulas (including dynamic arrays),
   tables, conditional formats, validation, comments, hyperlinks, charts, pictures, sparklines,
   PivotTables and print settings round-trip. CSV and TSV too.
+  Excel 97-2003 `.xls` workbooks open with their values, formulas and number formats (formatting and objects not yet).
   [XLSB worksheet data can be imported](docs/xlsb-import.md), using saved values instead of formulas.
   [ODS worksheet data can be imported](docs/ods-import.md), using saved values instead of formulas.
   [Static pictures can live inside cells](docs/cell-pictures.md), fitting their size and moving with the data.
@@ -166,7 +167,7 @@ egui frontend is a separate crate, so the UI can be swapped without touching the
 
 GridCraft is in **alpha**: the core workflow works end to end, but depth, fidelity and file
 compatibility are still rough. It covers 89% of the Excel ribbon commands in our catalog
-([`docs/parity-checklist.md`](docs/parity-checklist.md)) and 501 of Excel's 523 worksheet functions
+([`docs/parity-checklist.md`](docs/parity-checklist.md)) and 513 of Excel's 523 worksheet functions
 ([`docs/function-parity.md`](docs/function-parity.md)); weighted by what Excel users rely on, we
 estimate it is about 50% ready for real work. Next up: XLSX fidelity on real-world files, very large
 workbooks and multi-threaded recalc, chart depth, text in every script, and `.xls` import. Stage,

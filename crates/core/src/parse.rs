@@ -41,7 +41,12 @@ pub fn parse_input(s: &str, sys: DateSystem) -> Parsed {
 
 /// Numeric text as arithmetic coerces it ("1,000", "50%", "$3", "1/2/2020", "10:00").
 pub fn parse_number_text(s: &str) -> Option<f64> {
-    parse_numeric(s.trim(), DateSystem::D1900).map(|(n, _)| n)
+    parse_number_text_in(s, DateSystem::D1900)
+}
+
+/// Like [`parse_number_text`], with date text read in the given workbook date system.
+pub fn parse_number_text_in(s: &str, sys: DateSystem) -> Option<f64> {
+    parse_numeric(s.trim(), sys).map(|(n, _)| n)
 }
 
 fn parse_numeric(t: &str, sys: DateSystem) -> Option<(f64, Option<&'static str>)> {
@@ -252,10 +257,14 @@ fn parse_date(t: &str, sys: DateSystem) -> Option<(f64, &'static str)> {
     // "Mar 4, 2026" / "March 4 2026" / "4 March 2026"
     let words: Vec<&str> = t.split([' ', ',']).filter(|w| !w.is_empty()).collect();
     if words.len() == 3 {
+        // Two-digit years follow the same 2029 rule as the dashed forms above.
+        let expand = |w: &str, y: i64| if w.len() <= 2 { if y < 30 { 2000 + y } else { 1900 + y } } else { y };
         if let (Some(m), Some(d), Some(y)) = (month_from_name(words[0]), num(words[1]), num(words[2])) {
+            let y = expand(words[2], y);
             return valid_ymd(sys, y, m as i64, d).map(|s| (s, "d-mmm-yy"));
         }
         if let (Some(d), Some(m), Some(y)) = (num(words[0]), month_from_name(words[1]), num(words[2])) {
+            let y = expand(words[2], y);
             return valid_ymd(sys, y, m as i64, d).map(|s| (s, "d-mmm-yy"));
         }
     }
@@ -263,7 +272,8 @@ fn parse_date(t: &str, sys: DateSystem) -> Option<(f64, &'static str)> {
 }
 
 fn valid_ymd(sys: DateSystem, y: i64, m: i64, d: i64) -> Option<f64> {
-    if !(1..=12).contains(&m) || d < 1 {
+    // Dates before 1900 stay text (`DATE()` would add 1900 to such a year).
+    if !(1..=12).contains(&m) || d < 1 || y < 1900 {
         return None;
     }
     let max = crate::date::days_in_month_in(sys, y as i32, m as u32) as i64;
@@ -273,16 +283,12 @@ fn valid_ymd(sys: DateSystem, y: i64, m: i64, d: i64) -> Option<f64> {
     serial_from_ymd(sys, y, m, d)
 }
 
-/// The year used for dates typed without one. Fixed per process from the system clock when
-/// available (wasm without clock falls back to 2026).
-#[allow(clippy::disallowed_methods)] // the clock is read only off wasm
+/// The year used for dates typed without one, from the system clock (browser clock on wasm).
+/// Falls back to 2026 only when no clock is available.
 pub fn current_year() -> i64 {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        if let Ok(d) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-            let days = (d.as_secs() / 86400) as i64;
-            return crate::date::civil_from_days(days).0 as i64;
-        }
+    if let Some(ms) = crate::date::unix_now_ms() {
+        let days = (ms / 86_400_000.0).floor() as i64;
+        return crate::date::civil_from_days(days).0 as i64;
     }
     2026
 }
@@ -290,6 +296,8 @@ pub fn current_year() -> i64 {
 fn parse_datetime(t: &str, sys: DateSystem) -> Option<(f64, Option<&'static str>)> {
     if let Some((tf, secs, ampm)) = parse_time(t) {
         let f = match (secs, ampm) {
+            // 24 hours or more: elapsed hours, so 25:00 shows as 25:00:00, not 1:00.
+            _ if tf >= 1.0 => "[h]:mm:ss",
             (false, false) => "h:mm",
             (true, false) => "h:mm:ss",
             (false, true) => "h:mm AM/PM",
@@ -316,6 +324,16 @@ mod tests {
 
     fn p(s: &str) -> Parsed {
         parse_input(s, DateSystem::D1900)
+    }
+
+    #[test]
+    fn month_name_short_year() {
+        for s in ["Mar 4, 26", "Mar 4 26", "March 4 26", "4 March 26", "Mar 4, 2026"] {
+            assert_eq!(p(s).value, Value::Number(46085.0), "{s}");
+        }
+        assert_eq!(p("Mar 4, 99").value, p("Mar 4, 1999").value);
+        assert_eq!(p("Mar 4, 1776").value, Value::text("Mar 4, 1776"));
+        assert_eq!(p("Feb 30, 26").value, Value::text("Feb 30, 26"));
     }
 
     #[test]
@@ -352,11 +370,18 @@ mod tests {
         assert_eq!(p("7-Oct-2026").value, Value::Number(46302.0));
         assert_eq!(p("Oct 7, 2026").value, Value::Number(46302.0));
         assert_eq!(p("2/30/2026").value, Value::text("2/30/2026"));
+        assert_eq!(p("7/4/1776").value, Value::text("7/4/1776"));
+        assert_eq!(p("1776-07-04").value, Value::text("1776-07-04"));
+        assert_eq!(p("4-Jul-1776").value, Value::text("4-Jul-1776"));
+        assert_eq!(p("12/31/1899").value, Value::text("12/31/1899"));
+        assert_eq!(p("1/1/1900").value, Value::Number(1.0));
         assert_eq!(p("12:00").value, Value::Number(0.5));
         assert_eq!(p("6:00 PM").value, Value::Number(0.75));
         assert_eq!(p("12:00 AM").value, Value::Number(0.0));
         assert_eq!(p("10/7/2026 18:00").value, Value::Number(46302.75));
         assert_eq!(p("25:00").value, Value::Number(25.0 / 24.0));
+        assert_eq!(p("25:00").format, Some("[h]:mm:ss"));
+        assert_eq!(p("23:59").format, Some("h:mm"));
     }
 
     #[test]
