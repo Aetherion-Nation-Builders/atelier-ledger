@@ -5,15 +5,17 @@ use std::fmt::Write as _;
 
 use gridcraft_core::{CellError, CellRef, RangeRef, Value};
 use gridcraft_model::{
-    AutoFilter, Cell, CfOperator, CfRule, CfValueKind, Color, CondFormat, ErrorStyle, FilterCriterion, LineInfo, Orientation, Sheet, SparklineKind,
-    Style, Table, TotalsFn, Validation, ValidationKind, Workbook,
+    Cell, CfOperator, CfRule, CfValueKind, Color, CondFormat, ErrorStyle, FilterCriterion, LineInfo, Orientation, Sheet, SparklineKind, Style, Table,
+    TotalsFn, Validation, ValidationKind, Workbook, default_icon_thresholds, icon_count,
 };
 
 use crate::drawing::{Obj, image_content_type, image_ext};
 use crate::fmla::text_to_file;
 use crate::styles::{color_attrs, dxf_id};
 use crate::tables::{paper_id, px_to_col_width, px_to_pt};
-use crate::write::{CT_CHART, CT_COMMENTS, CT_DRAWING, CT_TABLE, NS_MAIN, NS_REL, Out, Rels, XML_DECL};
+use crate::write::{
+    CT_CHART, CT_COMMENTS, CT_DRAWING, CT_TABLE, CT_THREADED_COMMENTS, NS_MAIN, NS_REL, NS_THREADED, Out, REL_THREADED_COMMENT, Rels, XML_DECL,
+};
 use crate::xml::{encode_xstring, esc, esc_attr, num};
 
 fn sqref(ranges: &[RangeRef]) -> String {
@@ -33,10 +35,12 @@ fn cf_op_name(op: CfOperator) -> &'static str {
     }
 }
 
-/// Valid table name: letters, digits, `_` and `.`, starting with a letter or `_`.
+/// Valid table name: letters, digits, `_` and `.`, starting with a letter, `_` or `\`
+/// (Microsoft "Names in formulas" rules).
 fn table_name(name: &str, used: &mut HashSet<String>, n: u32) -> String {
-    let mut s: String = name.chars().map(|c| if c.is_alphanumeric() || c == '_' || c == '.' { c } else { '_' }).collect();
-    if s.is_empty() || !s.starts_with(|c: char| c.is_alphabetic() || c == '_') || gridcraft_core::CellRef::parse(&s).is_some() {
+    let mut s: String =
+        name.chars().enumerate().map(|(i, c)| if c.is_alphanumeric() || c == '_' || c == '.' || (i == 0 && c == '\\') { c } else { '_' }).collect();
+    if s.is_empty() || !s.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '\\') || gridcraft_core::CellRef::parse(&s).is_some() {
         s = format!("Table{n}");
     }
     let mut out = s.clone();
@@ -54,12 +58,7 @@ fn table_columns(t: &Table) -> Vec<String> {
     let mut used = HashSet::new();
     (0..w)
         .map(|i| {
-            let base = t
-                .columns
-                .get(i)
-                .map(|c| c.name.replace(['\r', '\n'], " "))
-                .filter(|n| !n.trim().is_empty())
-                .unwrap_or_else(|| format!("Column{}", i + 1));
+            let base = t.columns.get(i).map(|c| c.name.clone()).filter(|n| !n.trim().is_empty()).unwrap_or_else(|| format!("Column{}", i + 1));
             let mut name = base.clone();
             let mut k = 2;
             while !used.insert(name.to_lowercase()) {
@@ -82,7 +81,7 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     let tables: Vec<(&Table, Vec<String>)> = sheet
         .tables
         .iter()
-        .filter(|t| t.range.height() > t.header_row as u32 + t.totals_row as u32 || (t.header_row && !t.totals_row && t.range.height() >= 1))
+        .filter(|t| t.range.height() > t.header_row as u32 + t.totals_row as u32 || (t.header_row && t.range.height() > t.totals_row as u32))
         .map(|t| (t, table_columns(t)))
         .collect();
     for (t, cols) in &tables {
@@ -152,6 +151,9 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     if sheet.right_to_left {
         s.push_str(" rightToLeft=\"1\"");
     }
+    if sheet.view != gridcraft_model::SheetViewMode::Normal {
+        let _ = write!(s, " view=\"{}\"", sheet.view.as_str());
+    }
     if sheet.zoom != 100 && (10..=400).contains(&sheet.zoom) {
         let _ = write!(s, " zoomScale=\"{0}\" zoomScaleNormal=\"{0}\"", sheet.zoom);
     }
@@ -177,7 +179,11 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
             let _ = write!(
                 s,
                 " topLeftCell=\"{}\" activePane=\"{pane}\" state=\"frozen\"/>",
-                CellRef::new(rows.min(gridcraft_core::MAX_ROWS - 1), cols.min(gridcraft_core::MAX_COLS - 1)).a1()
+                CellRef::new(
+                    rows.max(sheet.view_top_left.row).min(gridcraft_core::MAX_ROWS - 1),
+                    cols.max(sheet.view_top_left.col).min(gridcraft_core::MAX_COLS - 1)
+                )
+                .a1()
             );
             let _ = write!(s, "<selection pane=\"{pane}\" activeCell=\"{active}\" sqref=\"{active}\"/>");
         }
@@ -327,13 +333,17 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         if !p.select_unlocked {
             s.push_str(" selectUnlockedCells=\"1\"");
         }
+        if let Some(h) = &p.password {
+            s.push_str(&password_attrs(h, ""));
+        }
         s.push_str("/>");
     }
+    s.push_str(&protected_ranges_xml(sheet));
     // autoFilter (a sheet filter overlapping a table would be invalid).
     if let Some(af) = &sheet.autofilter
         && !sheet.tables.iter().any(|t| t.range.intersects(&af.range))
     {
-        s.push_str(&autofilter_xml(af, out));
+        s.push_str(&autofilter_xml(af.range, &af.criteria, out));
     }
     if !sheet.merges.is_empty() {
         let merges: Vec<&RangeRef> = sheet.merges.iter().filter(|m| !m.is_single()).collect();
@@ -378,7 +388,10 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
             if t.is_empty() {
                 continue;
             }
-            let external = t.contains("://")
+            // `external` is what the file said, or what Insert › Link chose; the scheme test covers
+            // links made before the flag existed.
+            let external = h.external
+                || t.contains("://")
                 || t.to_ascii_lowercase().starts_with("mailto:")
                 || t.starts_with("\\\\")
                 || t.to_ascii_lowercase().starts_with("file:");
@@ -414,6 +427,8 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         }
         s.push_str("/>");
     }
+    // Unmodelled content kept from the source file (printer settings, controls, OLE objects…).
+    let kept = crate::passthrough::SheetKept::write(sheet, &mut rels, out);
     let m = |i: usize| num(p.margins.get(i).copied().unwrap_or(0.75) as f64);
     let _ =
         write!(s, "<pageMargins left=\"{}\" right=\"{}\" top=\"{}\" bottom=\"{}\" header=\"{}\" footer=\"{}\"/>", m(0), m(1), m(2), m(3), m(4), m(5));
@@ -429,14 +444,36 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
     if let Some((w, h)) = p.fit_to {
         let _ = write!(s, " fitToWidth=\"{w}\" fitToHeight=\"{h}\"");
     }
-    let _ = write!(s, " orientation=\"{}\"/>", if p.orientation == Orientation::Landscape { "landscape" } else { "portrait" });
-    if !p.header.is_empty() || !p.footer.is_empty() {
-        s.push_str("<headerFooter>");
-        if !p.header.is_empty() {
-            let _ = write!(s, "<oddHeader>{}</oddHeader>", esc(&p.header));
+    let _ = write!(s, " orientation=\"{}\"", if p.orientation == Orientation::Landscape { "landscape" } else { "portrait" });
+    if let Some(id) = kept.page_setup_id() {
+        let _ = write!(s, " r:id=\"{id}\"");
+    }
+    s.push_str("/>");
+    if p.has_header_footer() || p.different_first || p.different_odd_even || !p.hf_scale_with_doc || !p.hf_align_with_margins {
+        s.push_str("<headerFooter");
+        for (attr, on, default) in [
+            ("differentOddEven", p.different_odd_even, false),
+            ("differentFirst", p.different_first, false),
+            ("scaleWithDoc", p.hf_scale_with_doc, true),
+            ("alignWithMargins", p.hf_align_with_margins, true),
+        ] {
+            if on != default {
+                let _ = write!(s, " {attr}=\"{}\"", u8::from(on));
+            }
         }
-        if !p.footer.is_empty() {
-            let _ = write!(s, "<oddFooter>{}</oddFooter>", esc(&p.footer));
+        s.push('>');
+        // CT_HeaderFooter's element order.
+        for (tag, text) in [
+            ("oddHeader", &p.header),
+            ("oddFooter", &p.footer),
+            ("evenHeader", &p.even_header),
+            ("evenFooter", &p.even_footer),
+            ("firstHeader", &p.first_header),
+            ("firstFooter", &p.first_footer),
+        ] {
+            if !text.is_empty() {
+                let _ = write!(s, "<{tag}>{}</{tag}>", esc(text));
+            }
         }
         s.push_str("</headerFooter>");
     }
@@ -500,17 +537,29 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
         let rid = rels.add("drawing", &format!("../drawings/drawing{dn}.xml"));
         let _ = write!(s, "<drawing r:id=\"{rid}\"/>");
     }
-    // Notes: comments part + VML so Excel shows them.
+    // Notes: comments part + VML so Excel shows them. Threaded comments also get a legacy note
+    // (its text with the replies as lines, for readers without threaded comments) linked by id.
     if !sheet.comments.is_empty() {
         out.comments += 1;
         let n = out.comments;
-        out.part(&format!("xl/comments{n}.xml"), Some(CT_COMMENTS), comments_xml(sheet).into_bytes());
+        let ids = thread_ids(sheet, si);
+        out.part(&format!("xl/comments{n}.xml"), Some(CT_COMMENTS), comments_xml(sheet, &ids).into_bytes());
+        if !ids.is_empty() {
+            let x = threaded_xml(sheet, &ids, &mut out.persons);
+            out.part(&format!("xl/threadedComments/threadedComment{n}.xml"), Some(CT_THREADED_COMMENTS), x.into_bytes());
+            rels.add_uri(REL_THREADED_COMMENT, &format!("../threadedComments/threadedComment{n}.xml"));
+        }
         out.default_type("vml", "application/vnd.openxmlformats-officedocument.vmlDrawing");
-        out.part(&format!("xl/drawings/vmlDrawing{n}.vml"), None, vml_xml(sheet, n).into_bytes());
+        let vml_name = format!("xl/drawings/vmlDrawing{n}.vml");
+        let vml = kept.notes_vml(vml_xml(sheet, n), &vml_name, out);
+        out.part(&vml_name, None, vml.into_bytes());
         rels.add("comments", &format!("../comments{n}.xml"));
         let rid = rels.add("vmlDrawing", &format!("../drawings/vmlDrawing{n}.vml"));
         let _ = write!(s, "<legacyDrawing r:id=\"{rid}\"/>");
+    } else if let Some(rid) = kept.lone_vml(&mut rels, out) {
+        let _ = write!(s, "<legacyDrawing r:id=\"{rid}\"/>");
     }
+    s.push_str(&kept.elements());
     // Tables.
     if !tables.is_empty() {
         let mut parts = String::new();
@@ -520,15 +569,40 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
             out.table_id += 1;
             let n = out.tables;
             let name = table_name(&t.name, &mut used_names, out.table_id);
-            out.part(&format!("xl/tables/table{n}.xml"), Some(CT_TABLE), table_xml(t, cols, &name, out.table_id).into_bytes());
+            let xml = table_xml(t, cols, &name, out.table_id, out);
+            out.part(&format!("xl/tables/table{n}.xml"), Some(CT_TABLE), xml.into_bytes());
             let rid = rels.add("table", &format!("../tables/table{n}.xml"));
             let _ = write!(parts, "<tablePart r:id=\"{rid}\"/>");
         }
         let _ = write!(s, "<tableParts count=\"{}\">{parts}</tableParts>", tables.len());
     }
-    // Sparklines (Excel 2010 extension).
+    // Excel 2010 extensions: solid data bars, then sparklines.
+    let solid_bars: Vec<(&CondFormat, u32)> = sheet
+        .cond_formats
+        .iter()
+        .enumerate()
+        .filter(|(_, cf)| !cf.ranges.is_empty() && matches!(cf.rule, CfRule::DataBar { gradient: false, .. }))
+        .map(|(i, cf)| (cf, prio.get(i).copied().unwrap_or(1)))
+        .collect();
+    if !solid_bars.is_empty() || !sheet.sparklines.is_empty() {
+        s.push_str("<extLst>");
+    }
+    if !solid_bars.is_empty() {
+        let _ = write!(
+            s,
+            "<ext uri=\"{{78C0D931-6437-407d-A8A1-0F90B4350D7D}}\" xmlns:x14=\"{X14_NS}\" xmlns:xm=\"{XM_NS}\"><x14:conditionalFormattings>"
+        );
+        for (cf, p) in &solid_bars {
+            if let CfRule::DataBar { min, max, .. } = &cf.rule {
+                let (id, lo, hi) = (solid_bar_id(*p), x14_cfvo(min), x14_cfvo(max));
+                let _ = write!(s, "<x14:conditionalFormatting><x14:cfRule type=\"dataBar\" id=\"{id}\"><x14:dataBar gradient=\"0\">{lo}{hi}");
+                let _ = write!(s, "</x14:dataBar></x14:cfRule><xm:sqref>{}</xm:sqref></x14:conditionalFormatting>", sqref(&cf.ranges));
+            }
+        }
+        s.push_str("</x14:conditionalFormattings></ext>");
+    }
     if !sheet.sparklines.is_empty() {
-        s.push_str("<extLst><ext uri=\"{05C60535-1F16-4fd2-B633-F4F36F0B64E0}\" xmlns:x14=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\"><x14:sparklineGroups xmlns:xm=\"http://schemas.microsoft.com/office/excel/2006/main\">");
+        let _ = write!(s, "<ext uri=\"{{05C60535-1F16-4fd2-B633-F4F36F0B64E0}}\" xmlns:x14=\"{X14_NS}\"><x14:sparklineGroups xmlns:xm=\"{XM_NS}\">");
         for sp in &sheet.sparklines {
             let ty = match sp.kind {
                 SparklineKind::Line => "",
@@ -546,7 +620,10 @@ pub fn write_sheet(wb: &Workbook, si: usize, selected: bool, out: &mut Out) -> (
                 sp.cell.a1()
             );
         }
-        s.push_str("</x14:sparklineGroups></ext></extLst>");
+        s.push_str("</x14:sparklineGroups></ext>");
+    }
+    if !solid_bars.is_empty() || !sheet.sparklines.is_empty() {
+        s.push_str("</extLst>");
     }
     s.push_str("</worksheet>");
     (s, rels)
@@ -667,6 +744,33 @@ fn quote(t: &str) -> String {
     format!("\"{}\"", t.replace('"', "\"\""))
 }
 
+const X14_NS: &str = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/main";
+const XM_NS: &str = "http://schemas.microsoft.com/office/excel/2006/main";
+
+/// The id linking a solid data bar's `cfRule` to its x14 extension; unique per sheet because priorities are.
+fn solid_bar_id(priority: u32) -> String {
+    format!("{{00000000-0000-0000-0000-{priority:012}}}")
+}
+
+/// The `cfRule` extension that points a solid data bar at its x14 rule.
+fn solid_bar_ext(priority: u32) -> String {
+    let id = solid_bar_id(priority);
+    format!("<extLst><ext uri=\"{{B025F937-C7B1-47D3-B67F-A62EFF666E3E}}\" xmlns:x14=\"{X14_NS}\"><x14:id>{id}</x14:id></ext></extLst>")
+}
+
+/// An x14 `cfvo`: unlike the 2006 one it has no `val` attribute, the value is an `xm:f` child.
+fn x14_cfvo(v: &CfValueKind) -> String {
+    let (ty, val) = match v {
+        CfValueKind::Min => return "<x14:cfvo type=\"min\"/>".into(),
+        CfValueKind::Max => return "<x14:cfvo type=\"max\"/>".into(),
+        CfValueKind::Number(n) => ("num", num(*n)),
+        CfValueKind::Percent(n) => ("percent", num(*n)),
+        CfValueKind::Percentile(n) => ("percentile", num(*n)),
+        CfValueKind::Formula(f) => ("formula", text_to_file(f)),
+    };
+    format!("<x14:cfvo type=\"{ty}\"><xm:f>{}</xm:f></x14:cfvo>", esc(&val))
+}
+
 fn cf_rule_xml(cf: &CondFormat, priority: u32, out: &mut Out) -> String {
     let tl = cf.ranges.first().map(|r| r.start.a1()).unwrap_or_else(|| "A1".into());
     let stop = if cf.stop_if_true { " stopIfTrue=\"1\"" } else { "" };
@@ -762,12 +866,13 @@ fn cf_rule_xml(cf: &CondFormat, priority: u32, out: &mut Out) -> String {
             b.push_str("</colorScale>");
             format!("<cfRule type=\"colorScale\" priority=\"{priority}\"{stop}>{b}</cfRule>")
         }
-        CfRule::DataBar { min, max, color, show_value, .. } => format!(
-            "<cfRule type=\"dataBar\" priority=\"{priority}\"{stop}><dataBar{}>{}{}<color {}/></dataBar></cfRule>",
+        CfRule::DataBar { min, max, color, show_value, gradient } => format!(
+            "<cfRule type=\"dataBar\" priority=\"{priority}\"{stop}><dataBar{}>{}{}<color {}/></dataBar>{}</cfRule>",
             if *show_value { "" } else { " showValue=\"0\"" },
             cfvo_xml(min),
             cfvo_xml(max),
-            if *color == Color::Auto { "rgb=\"FF638EC6\"".to_string() } else { color_attrs(color) }
+            if *color == Color::Auto { "rgb=\"FF638EC6\"".to_string() } else { color_attrs(color) },
+            if *gradient { String::new() } else { solid_bar_ext(priority) }
         ),
         CfRule::IconSet { set, thresholds, reverse, show_value } => {
             let mut b = format!("<iconSet iconSet=\"{}\"", esc_attr(set));
@@ -778,7 +883,15 @@ fn cf_rule_xml(cf: &CondFormat, priority: u32, out: &mut Out) -> String {
                 b.push_str(" showValue=\"0\"");
             }
             b.push('>');
-            for t in thresholds {
+            // CT_IconSet needs one cfvo per icon (minOccurs 2); the first is the lower bound.
+            let k = icon_count(set);
+            let defaults = default_icon_thresholds(set);
+            let cfvos: Vec<&CfValueKind> = match thresholds.len() {
+                n if n == k => thresholds.iter().collect(),
+                n if n + 1 == k => defaults.iter().take(1).chain(thresholds).collect(),
+                _ => defaults.iter().collect(),
+            };
+            for t in cfvos {
                 b.push_str(&cfvo_xml(t));
             }
             b.push_str("</iconSet>");
@@ -854,14 +967,14 @@ fn filter_operator(op: &str) -> &'static str {
     }
 }
 
-fn autofilter_xml(af: &AutoFilter, out: &mut Out) -> String {
-    let mut s = format!("<autoFilter ref=\"{}\"", af.range.a1());
-    if af.criteria.is_empty() {
+fn autofilter_xml(range: RangeRef, criteria: &[(u32, FilterCriterion)], out: &mut Out) -> String {
+    let mut s = format!("<autoFilter ref=\"{}\"", range.a1());
+    if criteria.is_empty() {
         s.push_str("/>");
         return s;
     }
     s.push('>');
-    for (col, c) in &af.criteria {
+    for (col, c) in criteria {
         let _ = write!(s, "<filterColumn colId=\"{col}\">");
         match c {
             FilterCriterion::Values { values, blanks } => {
@@ -894,6 +1007,13 @@ fn autofilter_xml(af: &AutoFilter, out: &mut Out) -> String {
                 st.font.color = *c;
                 let _ = write!(s, "<colorFilter dxfId=\"{}\" cellColor=\"0\"/>", dxf_id(&mut out.dxfs, &st));
             }
+            FilterCriterion::Icon { set, id } => {
+                let _ = write!(s, "<iconFilter iconSet=\"{}\"", esc_attr(set));
+                if let Some(id) = id {
+                    let _ = write!(s, " iconId=\"{id}\"");
+                }
+                s.push_str("/>");
+            }
         }
         s.push_str("</filterColumn>");
     }
@@ -901,7 +1021,7 @@ fn autofilter_xml(af: &AutoFilter, out: &mut Out) -> String {
     s
 }
 
-fn table_xml(t: &Table, cols: &[String], name: &str, id: u32) -> String {
+fn table_xml(t: &Table, cols: &[String], name: &str, id: u32, out: &mut Out) -> String {
     let mut s =
         format!("{XML_DECL}<table xmlns=\"{NS_MAIN}\" id=\"{id}\" name=\"{0}\" displayName=\"{0}\" ref=\"{1}\"", esc_attr(name), t.range.a1());
     if !t.header_row {
@@ -912,16 +1032,26 @@ fn table_xml(t: &Table, cols: &[String], name: &str, id: u32) -> String {
     } else {
         s.push_str(" totalsRowShown=\"0\"");
     }
+    if let Some(ty) = &t.table_type {
+        let _ = write!(s, " tableType=\"{}\"", esc_attr(ty));
+    }
+    if let Some(c) = t.connection_id {
+        let _ = write!(s, " connectionId=\"{c}\"");
+    }
     s.push('>');
     if t.header_row && t.filter_button {
         let end_row = if t.totals_row { t.range.end.row.saturating_sub(1).max(t.range.start.row) } else { t.range.end.row };
         let r = RangeRef::new(t.range.start, CellRef::new(end_row, t.range.end.col));
-        let _ = write!(s, "<autoFilter ref=\"{}\"/>", r.a1());
+        s.push_str(&autofilter_xml(r, &t.filter, out));
     }
     let _ = write!(s, "<tableColumns count=\"{}\">", cols.len());
     for (i, name) in cols.iter().enumerate() {
         let col = t.columns.get(i);
-        let _ = write!(s, "<tableColumn id=\"{}\" name=\"{}\"", i + 1, esc_attr(&encode_xstring(name)));
+        let _ = write!(s, "<tableColumn id=\"{}\"", i + 1);
+        if let Some(u) = col.and_then(|c| c.unique_name.as_ref()) {
+            let _ = write!(s, " uniqueName=\"{}\"", esc_attr(u));
+        }
+        let _ = write!(s, " name=\"{}\"", esc_attr(&encode_xstring(name)));
         let totals = col.map(|c| c.totals).unwrap_or_default();
         if t.totals_row {
             let f = match totals {
@@ -944,7 +1074,8 @@ fn table_xml(t: &Table, cols: &[String], name: &str, id: u32) -> String {
         }
         let calc = col.and_then(|c| c.formula.as_ref()).filter(|f| !f.is_empty());
         let custom = if t.totals_row && totals == TotalsFn::Custom { col.and_then(|c| c.totals_label.as_ref()) } else { None };
-        if calc.is_none() && custom.is_none() {
+        let xml = col.and_then(|c| c.xml.as_ref());
+        if calc.is_none() && custom.is_none() && xml.is_none() {
             s.push_str("/>");
             continue;
         }
@@ -954,6 +1085,13 @@ fn table_xml(t: &Table, cols: &[String], name: &str, id: u32) -> String {
         }
         if let Some(f) = custom {
             let _ = write!(s, "<totalsRowFormula>{}</totalsRowFormula>", esc(&text_to_file(f)));
+        }
+        if let Some(x) = xml {
+            let _ = write!(s, "<xmlColumnPr mapId=\"{}\" xpath=\"{}\"", x.map_id, esc_attr(&x.xpath));
+            if x.denormalized {
+                s.push_str(" denormalized=\"1\"");
+            }
+            let _ = write!(s, " xmlDataType=\"{}\"/>", esc_attr(&x.data_type));
         }
         s.push_str("</tableColumn>");
     }
@@ -971,29 +1109,155 @@ fn table_xml(t: &Table, cols: &[String], name: &str, id: u32) -> String {
     s
 }
 
-fn comments_xml(sheet: &Sheet) -> String {
+/// Ids of the threaded comments of sheet `si`: the thread's id, then one per reply. GUID-shaped
+/// and deterministic; they only need to be unique within the file.
+fn thread_ids(sheet: &Sheet, si: usize) -> BTreeMap<CellRef, Vec<String>> {
+    let mut seq: u64 = 0;
+    let mut ids = BTreeMap::new();
+    for (cell, c) in sheet.comments.iter().filter(|(_, c)| c.threaded) {
+        let v: Vec<String> = (0..=c.replies.len())
+            .map(|_| {
+                seq += 1;
+                format!("{{{:08X}-0000-4000-8001-{:012X}}}", si as u64 & 0xFFFF_FFFF, seq & 0xFFFF_FFFF_FFFF)
+            })
+            .collect();
+        ids.insert(*cell, v);
+    }
+    ids
+}
+
+fn comments_xml(sheet: &Sheet, ids: &BTreeMap<CellRef, Vec<String>>) -> String {
+    // A threaded comment's legacy note is authored by `tc={thread id}`.
+    let author_of = |cell: &CellRef, c: &gridcraft_model::Comment| match ids.get(cell).and_then(|v| v.first()) {
+        Some(id) => format!("tc={id}"),
+        None => c.author.clone(),
+    };
     let mut authors: Vec<String> = vec![];
-    for c in sheet.comments.values() {
-        if !authors.contains(&c.author) {
-            authors.push(c.author.clone());
+    for (cell, c) in &sheet.comments {
+        let a = author_of(cell, c);
+        if !authors.contains(&a) {
+            authors.push(a);
         }
     }
-    let mut s = format!("{XML_DECL}<comments xmlns=\"{NS_MAIN}\"><authors>");
+    let mut s = if ids.is_empty() {
+        format!("{XML_DECL}<comments xmlns=\"{NS_MAIN}\"><authors>")
+    } else {
+        format!(
+            "{XML_DECL}<comments xmlns=\"{NS_MAIN}\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" mc:Ignorable=\"xr\" xmlns:xr=\"http://schemas.microsoft.com/office/spreadsheetml/2014/revision\"><authors>"
+        )
+    };
     for a in &authors {
         let _ = write!(s, "<author>{}</author>", esc(a));
     }
     s.push_str("</authors><commentList>");
     for (cell, c) in &sheet.comments {
-        let aid = authors.iter().position(|a| *a == c.author).unwrap_or(0);
+        let a = author_of(cell, c);
+        let aid = authors.iter().position(|x| *x == a).unwrap_or(0);
         let mut text = c.text.clone();
         // Threaded replies are kept as text lines.
         for (who, reply) in &c.replies {
             let _ = write!(text, "\n{who}: {reply}");
         }
-        let _ = write!(s, "<comment ref=\"{}\" authorId=\"{aid}\"><text><r>{}</r></text></comment>", cell.a1(), crate::xml::t_el(&text));
+        let link = match ids.get(cell).and_then(|v| v.first()) {
+            Some(id) => format!(" shapeId=\"0\" xr:uid=\"{id}\""),
+            None => String::new(),
+        };
+        let _ = write!(s, "<comment ref=\"{}\" authorId=\"{aid}\"{link}><text><r>{}</r></text></comment>", cell.a1(), crate::xml::t_el(&text));
     }
     s.push_str("</commentList></comments>");
     s
+}
+
+/// `2024-05-01T09:30:00` with optional fraction and zone: what `dT` (xsd:dateTime) accepts.
+/// Anything else is left out rather than written into the file.
+fn iso_datetime(d: &str) -> bool {
+    let b = d.as_bytes();
+    let digits = |r: std::ops::Range<usize>| b.get(r).is_some_and(|s| s.iter().all(u8::is_ascii_digit));
+    d.len() <= 40
+        && digits(0..4)
+        && b.get(4) == Some(&b'-')
+        && digits(5..7)
+        && b.get(7) == Some(&b'-')
+        && digits(8..10)
+        && b.get(10) == Some(&b'T')
+        && digits(11..13)
+        && b.get(13) == Some(&b':')
+        && digits(14..16)
+        && b.get(16) == Some(&b':')
+        && digits(17..19)
+        && b.get(19..).is_some_and(|rest| rest.iter().all(|c| c.is_ascii_digit() || b".:+-Z".contains(c)))
+}
+
+/// `xl/threadedComments/threadedCommentN.xml`: each thread, then its replies (`parentId`).
+fn threaded_xml(sheet: &Sheet, ids: &BTreeMap<CellRef, Vec<String>>, persons: &mut Vec<String>) -> String {
+    let mut person = |name: &str| {
+        let i = persons.iter().position(|p| p == name).unwrap_or_else(|| {
+            persons.push(name.to_string());
+            persons.len() - 1
+        });
+        crate::write::person_guid(i)
+    };
+    let mut s = format!("{XML_DECL}<ThreadedComments xmlns=\"{NS_THREADED}\" xmlns:x=\"{NS_MAIN}\">");
+    for (cell, id) in ids {
+        let Some(c) = sheet.comments.get(cell) else { continue };
+        let entries = std::iter::once((&c.author, &c.text)).chain(c.replies.iter().map(|(a, t)| (a, t)));
+        for (k, ((author, text), own)) in entries.zip(id).enumerate() {
+            let date = match c.dates.get(k).filter(|d| iso_datetime(d)) {
+                Some(d) => format!(" dT=\"{}\"", esc_attr(d)),
+                None => String::new(),
+            };
+            let tail = match (k, id.first()) {
+                (0, _) if c.resolved => " done=\"1\"".to_string(),
+                (0, _) | (_, None) => String::new(),
+                (_, Some(parent)) => format!(" parentId=\"{parent}\""),
+            };
+            let _ = write!(
+                s,
+                "<threadedComment ref=\"{}\"{date} personId=\"{}\" id=\"{own}\"{tail}><text>{}</text></threadedComment>",
+                cell.a1(),
+                person(author),
+                esc(text)
+            );
+        }
+    }
+    s.push_str("</ThreadedComments>");
+    s
+}
+
+/// A protection password hash as attributes, each name preceded by `prefix` (see
+/// [`crate::sheet_read::read_password`]).
+pub(crate) fn password_attrs(h: &gridcraft_model::PasswordHash, prefix: &str) -> String {
+    let name = |base: &str| crate::sheet_read::password_attr(prefix, base);
+    match h {
+        gridcraft_model::PasswordHash::Legacy(h) => format!(" {}=\"{h:04X}\"", name("password")),
+        gridcraft_model::PasswordHash::Iterated { algorithm, hash, salt, spin_count } => format!(
+            " {}=\"{}\" {}=\"{}\" {}=\"{}\" {}=\"{spin_count}\"",
+            name("algorithmName"),
+            esc_attr(algorithm),
+            name("hashValue"),
+            esc_attr(hash),
+            name("saltValue"),
+            esc_attr(salt),
+            name("spinCount")
+        ),
+    }
+}
+
+/// Allow Edit Ranges: `<protectedRanges>` (after `sheetProtection`).
+fn protected_ranges_xml(sheet: &Sheet) -> String {
+    let mut s = String::new();
+    for r in sheet.edit_ranges.iter().filter(|r| !r.ranges.is_empty()) {
+        let sqref: Vec<String> = r.ranges.iter().map(|x| x.a1()).collect();
+        let _ = write!(s, "<protectedRange name=\"{}\" sqref=\"{}\"", esc_attr(&r.title), sqref.join(" "));
+        if let Some(h) = &r.password {
+            s.push_str(&password_attrs(h, ""));
+        }
+        if let Some(sd) = &r.security_descriptor {
+            let _ = write!(s, " securityDescriptor=\"{}\"", esc_attr(sd));
+        }
+        s.push_str("/>");
+    }
+    if s.is_empty() { s } else { format!("<protectedRanges>{s}</protectedRanges>") }
 }
 
 /// Legacy VML shapes Excel uses to display notes.
