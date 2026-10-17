@@ -42,7 +42,10 @@ jobs:
         run: |
           set -o pipefail
           if grep -qE '"ci"' xtask/src/*.rs 2>/dev/null; then
-            cargo xtask ci 2>&1 | tee gate.log
+            cargo fmt --all -- --check
+            cargo clippy --workspace --all-targets --locked -- -D warnings 2>&1 | tee gate.log
+            cargo test --workspace --locked --no-fail-fast 2>&1 | tee -a gate.log
+            cargo xtask ci 2>&1 | tee -a gate.log
           else
             cargo fmt --all -- --check
             cargo clippy --workspace --all-targets --locked -- -D warnings 2>&1 | tee gate.log
