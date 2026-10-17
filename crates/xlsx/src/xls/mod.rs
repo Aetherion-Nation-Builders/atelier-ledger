@@ -46,8 +46,7 @@ pub(crate) fn invalid(msg: impl Into<String>) -> IoError {
 }
 
 /// The message for an encrypted workbook (a FilePass record).
-const ENCRYPTED: &str =
-    "this .xls workbook is password-protected (encrypted). Atelier Ledger can't open encrypted .xls files; remove the password in Excel and try again.";
+const ENCRYPTED: &str = "this .xls workbook is password-protected (encrypted). Atelier Ledger can't open encrypted .xls files; remove the password in Excel and try again.";
 
 /// Whether the bytes are a compound file holding an Excel workbook stream (BIFF8 `Workbook`
 /// or BIFF5 `Book`).
