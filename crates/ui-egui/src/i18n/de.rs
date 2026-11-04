@@ -279,7 +279,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Options" => "Optionen",
         "Account" => "Konto",
         "Product Information" => "Produktinformationen",
-        "About GridCraft" => "Info zu GridCraft",
+        "About Atelier Ledger" => "Info zu Atelier Ledger",
         "Version" => "Version",
         "Platform" => "Plattform",
         "Licence" => "Lizenz",

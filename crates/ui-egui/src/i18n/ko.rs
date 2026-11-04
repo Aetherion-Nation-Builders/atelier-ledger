@@ -357,7 +357,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Options" => "옵션",
         "Account" => "계정",
         "Product Information" => "제품 정보",
-        "About GridCraft" => "GridCraft 정보",
+        "About Atelier Ledger" => "Atelier Ledger 정보",
         "Version" => "버전",
         "Platform" => "플랫폼",
         "Licence" => "라이선스",

@@ -19,7 +19,7 @@ impl SheetApp {
         // refuses `cell.set` anyway): refuse before a draft exists, rather than leaving one that
         // can never be committed and blocks Save (#2945).
         if let Some(m) = self.session.locked_cell_message(d.wb.active_sheet(), at) {
-            self.message = Some(("GridCraft".into(), m));
+            self.message = Some(("Atelier Ledger".into(), m));
             return;
         }
         // A picture has no editable scalar text. Selecting it, F2, or clicking
@@ -113,13 +113,13 @@ impl SheetApp {
         // open) can't be entered: drop it with the warning instead of keeping it, which would
         // block Save with a draft that can never be committed (#2945).
         if let Some(m) = self.session.locked_cell_message(ed.sheet, ed.cell) {
-            self.message = Some(("GridCraft".into(), m));
+            self.message = Some(("Atelier Ledger".into(), m));
             return true;
         }
         let text = match self.session.active().map(|d| formula_locale::canonical(&text, ed.locale, &d.wb, ed.sheet, ed.cell)) {
             Some(Ok(text)) => text,
             Some(Err(error)) => {
-                self.message = Some(("GridCraft".into(), error.to_string()));
+                self.message = Some(("Atelier Ledger".into(), error.to_string()));
                 self.editor = Some(ed);
                 self.session.mode = gridcraft_engine::Mode::Edit;
                 return false;
@@ -131,7 +131,7 @@ impl SheetApp {
             && let Some((dv, msg)) = gridcraft_engine::cmd::data::check_validation(&d.wb, ed.sheet, ed.cell, &text)
         {
             if dv.error_style == gridcraft_engine::model::ErrorStyle::Stop {
-                let title = if dv.error_title.is_empty() { "GridCraft".to_string() } else { dv.error_title.clone() };
+                let title = if dv.error_title.is_empty() { "Atelier Ledger".to_string() } else { dv.error_title.clone() };
                 self.message = Some((title, msg));
                 self.editor = Some(ed);
                 self.session.mode = gridcraft_engine::Mode::Edit;
@@ -143,7 +143,7 @@ impl SheetApp {
         if self.session.active().is_some_and(|d| d.wb.active_sheet() != ed.sheet)
             && let Err(e) = self.session.run("sheet.activate", json!({"sheet": ed.sheet}))
         {
-            self.message = Some(("GridCraft".into(), clean_error(&e)));
+            self.message = Some(("Atelier Ledger".into(), clean_error(&e)));
             self.editor = Some(ed);
             self.session.mode = gridcraft_engine::Mode::Edit;
             return false;
@@ -174,7 +174,7 @@ impl SheetApp {
                 true
             }
             Err(e) => {
-                self.message = Some(("GridCraft".into(), clean_error(&e)));
+                self.message = Some(("Atelier Ledger".into(), clean_error(&e)));
                 self.editor = Some(ed);
                 self.session.mode = gridcraft_engine::Mode::Edit;
                 false

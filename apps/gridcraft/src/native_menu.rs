@@ -233,7 +233,7 @@ impl NativeMenu {
             &PredefinedMenuItem::hide_others(None),
             &PredefinedMenuItem::show_all(None),
             &PredefinedMenuItem::separator(),
-            &MenuItem::with_id(QUIT, "Quit GridCraft", true, Accelerator::from_str("CMD+Q").ok()),
+            &MenuItem::with_id(QUIT, "Quit Atelier Ledger", true, Accelerator::from_str("CMD+Q").ok()),
         ]);
         let _ = menu.append(&app_menu);
         let mut theme_items = Vec::new();

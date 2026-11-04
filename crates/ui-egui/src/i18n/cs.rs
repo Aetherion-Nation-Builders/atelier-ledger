@@ -267,7 +267,7 @@ pub(super) fn translate(text: &str) -> Option<&'static str> {
         "Options" => "Možnosti",
         "Account" => "Účet",
         "Product Information" => "Informace o produktu",
-        "About GridCraft" => "O aplikaci GridCraft",
+        "About Atelier Ledger" => "O aplikaci Atelier Ledger",
         "Version" => "Verze",
         "Platform" => "Platforma",
         "Licence" => "Licence",
