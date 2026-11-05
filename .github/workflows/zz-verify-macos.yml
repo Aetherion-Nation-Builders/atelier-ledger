@@ -25,6 +25,7 @@ jobs:
         shell: bash
         run: |
           sed 's/\x1b\[[0-9;]*[A-Za-z]//g' build.log > plain.log
-          grep -n -E "^error|panicked|warning: build failed|failed to run custom build" plain.log | head -20 | while read -r l; do echo "::error title=Build::${l:0:800}"; done
-          grep -A12 -E "^error" plain.log | head -60 | tr '\n' ' ' | cut -c1-3000 | sed 's/^/::error title=Context::/'
-          echo "::error title=Tail::$(tail -c 2500 plain.log | tr '\n' ' ')"
+          grep -n -E '^error' plain.log | cut -d: -f1 | head -12 | while read -r n; do
+            msg=$(sed -n "${n},$((n+14))p" plain.log | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Error at line ${n}::${msg}"
+          done
