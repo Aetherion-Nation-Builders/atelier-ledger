@@ -240,7 +240,7 @@ impl SheetApp {
         if let Some(why) = why {
             self.editor = None;
             self.session.mode = gridcraft_engine::Mode::Ready;
-            self.message = Some(("GridCraft".into(), why.into()));
+            self.message = Some(("Atelier Ledger".into(), why.into()));
             return;
         }
         if let (true, Some(sheet), Some(ed)) = (moved, found, self.editor.as_mut()) {
@@ -263,7 +263,7 @@ impl SheetApp {
                 true
             }
             None => {
-                self.message = Some(("GridCraft".into(), DRAFT_SHEET_GONE.into()));
+                self.message = Some(("Atelier Ledger".into(), DRAFT_SHEET_GONE.into()));
                 false
             }
         }
@@ -300,7 +300,7 @@ impl SheetApp {
         // A locked cell on a protected sheet is refused before a draft exists, as `begin_edit`
         // refuses it (#2945).
         if let Some(m) = self.session.locked_cell_message(d.wb.active_sheet(), at) {
-            self.message = Some(("GridCraft".into(), m));
+            self.message = Some(("Atelier Ledger".into(), m));
             return;
         }
         let py = sh.cell(at).and_then(|c| c.py.as_deref());
@@ -378,7 +378,7 @@ impl SheetApp {
         // A draft on a cell sheet protection now locks can never be entered: it is dropped with
         // the warning, as `commit_edit_here` drops an ordinary one (#2945).
         if let Some(m) = self.session.locked_cell_message(ed.sheet, ed.cell) {
-            self.message = Some(("GridCraft".into(), m));
+            self.message = Some(("Atelier Ledger".into(), m));
             return true;
         }
         // No code at all: a Python cell is cleared through cell.set, as an empty entry clears any
@@ -394,7 +394,7 @@ impl SheetApp {
                 true
             }
             Err(e) => {
-                self.message = Some(("GridCraft".into(), clean_error(&e)));
+                self.message = Some(("Atelier Ledger".into(), clean_error(&e)));
                 self.editor = Some(ed);
                 self.session.mode = gridcraft_engine::Mode::Edit;
                 false
