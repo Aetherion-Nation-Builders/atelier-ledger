@@ -26,8 +26,7 @@ pub(crate) fn invalid(msg: impl Into<String>) -> IoError {
 }
 
 /// The message for an encrypted workbook (a FilePass record).
-const ENCRYPTED: &str =
-    "this .xls workbook is password-protected (encrypted). GridCraft can't open encrypted .xls files; remove the password in Excel and try again.";
+const ENCRYPTED: &str = "this .xls workbook is password-protected (encrypted). Atelier Ledger can't open encrypted .xls files; remove the password in Excel and try again.";
 
 /// Whether the bytes are a compound file holding an Excel workbook stream (BIFF8 `Workbook`
 /// or BIFF5 `Book`).
@@ -128,7 +127,7 @@ pub(crate) fn read_xls_budgeted(bytes: &[u8], limits: x::Limits, functions: Func
         wb.sheets.push(Arc::new(sheet));
     }
     if unparsed {
-        report.warn("Some formulas use syntax GridCraft can't parse yet; their saved results were kept as values.");
+        report.warn("Some formulas use syntax Atelier Ledger can't parse yet; their saved results were kept as values.");
     }
     wb.calc = calc_of(&book.calc);
     wb.calc.precision_as_displayed = book.precision_as_displayed;
