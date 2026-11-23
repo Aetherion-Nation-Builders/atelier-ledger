@@ -16,6 +16,8 @@ jobs:
       - run: gh extension install github/gh-actions-lock --pin v0.4.1
       - run: |
           rm .github/workflows/zz-lockgen.yml
+          sed -i -E 's#uses: ([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)@[0-9a-f]{40} \# ([^ ]+)$#uses: \1@\2#' .github/workflows/release.yml .github/workflows/windows-arm64.yml .github/workflows/freebsd.yml
+          grep -n 'uses:' .github/workflows/release.yml .github/workflows/windows-arm64.yml .github/workflows/freebsd.yml
           gh actions-lock || true
           echo "=====DIFF====="
           git diff
