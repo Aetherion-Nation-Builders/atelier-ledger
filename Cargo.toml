@@ -30,22 +30,29 @@ gridcraft-math = { path = "crates/math" }
 # ui-egui, craft-print in the app, craft-web-api and craft-web-host in the web app) comes from one
 # craft-libs revision.
 # craft-update: app-specific pretend versions apply to startup and manual checks.
-craft-update = { git = "https://github.com/storytold/craft-libs", rev = "bb57d422d0bc842cbde430955825553ab7b976f4", version = "=0.1.0", features = ["egui"] }
+craft-update = { git = "https://github.com/storytold/craft-libs", rev = "e98299546f5c5c3c22388d16507f8b5e61a5f280", version = "=0.1.0", features = ["egui"] }
 # PDF RunLength encoding; this revision also fixes the vendored JBIG2 dependency for Git consumers.
+craft-pdf = { git = "https://github.com/storytold/craft-libs", rev = "ff142b3ad58aa7306676749428f4f2f9b277b5dd", version = "0.1.0", default-features = false }
 craft-stream-codecs = { git = "https://github.com/storytold/craft-libs", rev = "f7e0d7fd5577e102b4634bcbe062e649eb68165f", version = "0.1.0" }
 # Compound files ([MS-CFB]) and password-encrypted OOXML packages ([MS-OFFCRYPTO]).
-craft-cfb = { git = "https://github.com/storytold/craft-libs", rev = "bb57d422d0bc842cbde430955825553ab7b976f4", version = "0.1.0" }
-craft-offcrypto = { git = "https://github.com/storytold/craft-libs", rev = "bb57d422d0bc842cbde430955825553ab7b976f4", version = "0.1.0" }
+craft-cfb = { git = "https://github.com/storytold/craft-libs", rev = "e98299546f5c5c3c22388d16507f8b5e61a5f280", version = "0.1.0" }
+craft-offcrypto = { git = "https://github.com/storytold/craft-libs", rev = "e98299546f5c5c3c22388d16507f8b5e61a5f280", version = "0.1.0" }
+craft-ods = { git = "https://github.com/storytold/craft-libs", rev = "010702ee9b030844c852939095b1da0d0656a890", version = "0.1.0" }
 # OPC zip packages (parts, relationships, the zip writer) under `crates/xlsx/src/package.rs`.
-craft-opc = { git = "https://github.com/storytold/craft-libs", rev = "bb57d422d0bc842cbde430955825553ab7b976f4", version = "0.1.0" }
+craft-opc = { git = "https://github.com/storytold/craft-libs", rev = "a20dfd1623709b0bd9830106d3a92a1a443902e3", version = "0.1.0" }
 # Delimited text (CSV, TSV) and SYLK; `crates/xlsx/src/csv.rs` and `crates/engine/src/io/sylk.rs`
 # turn them into workbooks.
-craft-csv = { git = "https://github.com/storytold/craft-libs", rev = "bb57d422d0bc842cbde430955825553ab7b976f4", version = "0.1.0" }
+craft-csv = { git = "https://github.com/storytold/craft-libs", rev = "e98299546f5c5c3c22388d16507f8b5e61a5f280", version = "0.1.0" }
+craft-math = { git = "https://github.com/storytold/craft-libs", rev = "010702ee9b030844c852939095b1da0d0656a890", version = "0.1.0" }
 # The native JSON workbook (`.json`, `.scjson`): read, written, and kept newer macros written back.
 craft-gridcraft-format = { git = "https://github.com/storytold/craft-libs", rev = "9a6d894200221fcfedc274870c30394d404f859d", version = "0.1.0" }
 # Excel 97-2003 (.xls, BIFF8) workbooks; `crates/xlsx/src/xls.rs` maps them onto the model.
-craft-xml = { git = "https://github.com/storytold/craft-libs", rev = "bb57d422d0bc842cbde430955825553ab7b976f4", version = "0.1.0" }
-craft-xls = { git = "https://github.com/storytold/craft-libs", rev = "bb57d422d0bc842cbde430955825553ab7b976f4", version = "0.1.0" }
+# SpreadsheetML worksheet/drawing/string/package XML; workbook model mapping stays in gridcraft-xlsx.
+craft-xlsx = { git = "https://github.com/storytold/craft-libs", rev = "a20dfd1623709b0bd9830106d3a92a1a443902e3", version = "0.1.0" }
+craft-xml = { git = "https://github.com/storytold/craft-libs", rev = "a20dfd1623709b0bd9830106d3a92a1a443902e3", version = "0.1.0" }
+craft-xls = { git = "https://github.com/storytold/craft-libs", rev = "3b8e426a260695af840a2cd79a064d40778f939e", version = "0.1.0" }
+craft-drawingml = { git = "https://github.com/storytold/craft-libs", rev = "a20dfd1623709b0bd9830106d3a92a1a443902e3", version = "0.1.0" }
+craft-mcp-server = { git = "https://github.com/storytold/craft-libs", rev = "08da5e1486ee640de1d2cccd8fe8dd32b1d3b62c", version = "=0.1.0" }
 
 # foundation
 thiserror = "2"
@@ -57,8 +64,8 @@ chrono = { version = "0.4.45", default-features = false, features = ["std", "clo
 web-time = "1.1.0"
 rayon = "1"
 regex = { version = "1", default-features = false, features = ["std", "unicode", "perf"] }
-quick-xml = "0.42"
-zip = { version = "9", default-features = false, features = ["deflate"] }
+quick-xml = "0.41"
+zip = { version = "3", default-features = false, features = ["deflate"] }
 sha2 = { version = "0.11", default-features = false }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
@@ -66,26 +73,26 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 # young (0.1.x), and the gate recorded in docs/decisions.md vetted this release.
 ratex-parser = "=0.1.14"
 ratex-layout = "=0.1.14"
-ratex-types = "=0.1.15"
-ratex-font = "=0.1.15"
+ratex-types = "=0.1.14"
+ratex-font = "=0.1.14"
 
 # ui
 egui = "0.37"
 egui_extras = { version = "0.37", default-features = false }
 eframe = { version = "0.37", default-features = false }
 egui_kittest = "0.37"
-rfd = "0.18"
+rfd = "0.17"
 arboard = { version = "3.6", default-features = false }
 # The desktop's preferred language, for the first-run interface language (native only).
 sys-locale = "0.3"
 # Font parser egui's epaint uses; the UI validates system font files with it before handing them
 # to egui, which panics on a file it can't parse. Same version as epaint's, so no second copy.
-skrifa = { version = "0.48", default-features = false, features = ["std"] }
+skrifa = { version = "0.44", default-features = false, features = ["std"] }
 # Real font bytes for tests (Ubuntu Light, compiled into epaint).
 epaint_default_fonts = "0.37"
 # One native window per workbook: the window list, Window menu titles and the immediate-viewport
 # driver. Same craft-libs revision as craft-update above.
-craft-window = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "bb57d422d0bc842cbde430955825553ab7b976f4", default-features = false, features = ["egui"] }
+craft-window = { version = "0.1.0", git = "https://github.com/storytold/craft-libs", rev = "e98299546f5c5c3c22388d16507f8b5e61a5f280", default-features = false, features = ["egui"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
